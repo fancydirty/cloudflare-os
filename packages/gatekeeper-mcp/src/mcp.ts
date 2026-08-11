@@ -26,6 +26,7 @@ import {
 import type { ToolCatalog } from "@gadgets/mcp-shared/client";
 import {
   classifyTool,
+  type ClassifiedTool,
   type ServerTrust,
 } from "@gadgets/mcp-shared/tools";
 import { bindingNameFragment, hostOf } from "@gadgets/mcp-shared/util";
@@ -64,6 +65,7 @@ import {
 import { connectFormHtml } from "./connect-form.js";
 import { serverIdFromEndpoint } from "./server-id.js";
 import { mcpResourceFor, mcpResources } from "./resources.js";
+import { applyFullAuthorityPolicy, isFullAuthorityEndpoint } from "./full-authority.js";
 import type { ConfiguratorUIOption } from "@gadgets/configurator-ui";
 import { MCP_BASE_TYPES } from "@gadgets/mcp-shared/base-types";
 import MCP_LOGO_SVG from "./mcp-logo.svg";
@@ -406,7 +408,18 @@ export class McpGatekeeperImpl
   }
 
   protected get trust(): ServerTrust {
-    return TRUST;
+    return isFullAuthorityEndpoint(
+      this.ctx.props.endpoint,
+      this.env.MCP_FULL_AUTHORITY_ENDPOINT,
+    ) ? "vetted" : TRUST;
+  }
+
+  async tools(): Promise<ClassifiedTool[]> {
+    return applyFullAuthorityPolicy(
+      await super.tools(),
+      this.ctx.props.endpoint,
+      this.env.MCP_FULL_AUTHORITY_ENDPOINT,
+    );
   }
 
   protected get sessionClass() {
@@ -449,7 +462,7 @@ export class McpGatekeeperImpl
       serverName: this.ctx.props.serverName,
       endpoint: this.ctx.props.endpoint,
       discriminator: this.resourceUrl,
-      trust: TRUST,
+      trust: this.trust,
       tools: await this.tools(),
     });
   }
