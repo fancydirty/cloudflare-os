@@ -49,6 +49,17 @@ describe("applyFullAuthorityPolicy", () => {
     expect(applyFullAuthorityPolicy(tools, endpoint, configuredEndpoint)).toEqual(tools);
   });
 
+  it.each([
+    "https://agent.example/mcp?",
+    "https://agent.example/mcp#",
+    "https://agent.example/mcp?#",
+    "not a valid endpoint",
+  ])("rejects a malformed or non-canonical configured endpoint", endpoint => {
+    const tools = [action("code"), action("gitPush")];
+
+    expect(applyFullAuthorityPolicy(tools, endpoint, endpoint)).toEqual(tools);
+  });
+
   it("leaves a read-only code entry unchanged", () => {
     const tools = [{ ...action("code"), mode: "read" as const }];
 

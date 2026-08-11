@@ -6,7 +6,8 @@ export function isFullAuthorityEndpoint(
   endpoint: string,
   configuredEndpoint: string | undefined,
 ): boolean {
-  if (!configuredEndpoint || endpoint !== configuredEndpoint) return false;
+  if (!configuredEndpoint || endpoint !== configuredEndpoint ||
+      configuredEndpoint.includes("?") || configuredEndpoint.includes("#")) return false;
   try {
     const url = new URL(configuredEndpoint);
     return url.protocol === "https:" && url.href === configuredEndpoint &&
