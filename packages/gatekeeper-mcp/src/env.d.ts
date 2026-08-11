@@ -5,6 +5,7 @@ declare namespace Cloudflare {
     BASE_URL?: string;
     MCP_ALLOW_INSECURE?: string;
     MCP_CLIENT_NAME?: string;
+    MCP_CLOUDFLARE_API_FULL_AUTHORITY?: string;
     MCP_FULL_AUTHORITY_ENDPOINT?: string;
   }
 

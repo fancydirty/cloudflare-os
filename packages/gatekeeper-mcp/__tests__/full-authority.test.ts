@@ -26,6 +26,44 @@ describe("applyFullAuthorityPolicy", () => {
     ]);
   });
 
+  it("auto-approves only execute at the exact Cloudflare API endpoint when enabled", () => {
+    const tools = [
+      action("execute"),
+      action("search"),
+      { ...action("code"), autoApprovable: true },
+    ];
+
+    expect(applyFullAuthorityPolicy(
+      tools,
+      "https://mcp.cloudflare.com/mcp",
+      undefined,
+      "true",
+    )).toEqual([
+      { ...action("execute"), autoApprovable: true },
+      action("search"),
+      action("code"),
+    ]);
+
+    for (const endpoint of [
+      "https://mcp.cloudflare.com/mcp/",
+      "https://mcp.cloudflare.com/mcp?",
+      "https://mcp.cloudflare.com/mcp#",
+      "https://mcp.cloudflare.com/mcp-other",
+      "https://mcp-sibling.cloudflare.com/mcp",
+    ]) {
+      expect(applyFullAuthorityPolicy(tools, endpoint, undefined, "true")).toEqual(tools);
+    }
+
+    for (const enabled of [undefined, "false", "TRUE"]) {
+      expect(applyFullAuthorityPolicy(
+        tools,
+        "https://mcp.cloudflare.com/mcp",
+        undefined,
+        enabled,
+      )).toEqual(tools);
+    }
+  });
+
   it("does not preserve another action's approval at the exact configured endpoint", () => {
     const tools = [action("code"), { ...action("gitPush"), autoApprovable: true }];
 

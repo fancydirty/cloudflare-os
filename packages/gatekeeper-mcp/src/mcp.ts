@@ -411,6 +411,7 @@ export class McpGatekeeperImpl
     return isFullAuthorityEndpoint(
       this.ctx.props.endpoint,
       this.env.MCP_FULL_AUTHORITY_ENDPOINT,
+      this.env.MCP_CLOUDFLARE_API_FULL_AUTHORITY,
     ) ? "vetted" : TRUST;
   }
 
@@ -419,6 +420,7 @@ export class McpGatekeeperImpl
       await super.tools(),
       this.ctx.props.endpoint,
       this.env.MCP_FULL_AUTHORITY_ENDPOINT,
+      this.env.MCP_CLOUDFLARE_API_FULL_AUTHORITY,
     );
   }
 
