@@ -27,7 +27,7 @@ function enableRule(storage: AutoApprovalStorage, actionTag = "edit", gatekeeper
 function putAction(
     storage: AutoApprovalStorage, id: number,
     opts: { gatekeeperId?: number; actionTag?: string; autoApprovable?: boolean;
-            state?: ActionRecord["state"] } = {}) {
+            portableAcrossConnections?: true; state?: ActionRecord["state"] } = {}) {
   storage.actions.put({
     id,
     gatekeeperId: opts.gatekeeperId ?? GK,
@@ -40,7 +40,11 @@ function putAction(
       title: `Action ${id}`,
       description: `Action ${id} description`,
       implementsRevert: true,
-      actionKind: { tag: opts.actionTag ?? "edit", label: "Edits" },
+      actionKind: {
+        tag: opts.actionTag ?? "edit",
+        label: "Edits",
+        ...(opts.portableAcrossConnections ? {portableAcrossConnections: true as const} : {}),
+      },
       autoApprovable: opts.autoApprovable ?? true,
     },
   });
@@ -111,6 +115,56 @@ function flush(): Promise<void> {
 }
 
 describe("AutoApprovalDrainer.drain", () => {
+  it("carries an explicitly-portable rule to a replacement connection", async () => {
+    let storage = makeStorage();
+    enableRule(storage, "mcp-code", 1);
+    putAction(storage, 1, {
+      gatekeeperId: 2,
+      actionTag: "mcp-code",
+      portableAcrossConnections: true,
+    });
+
+    let { applyFn, calls } = makeImmediateApply(storage);
+    await new AutoApprovalDrainer(storage, applyFn).drain(2);
+
+    expect(calls).toEqual([1]);
+    expect(getAction(storage, 1).state).toBe("approved");
+    expect(storage.autoApproveTags.get("1:mcp-code")).toBeUndefined();
+    expect(storage.autoApproveTags.get("2:mcp-code")?.enabledBy).toEqual(ENABLER);
+  });
+
+  it("does not carry an ordinary connection-scoped rule", async () => {
+    let storage = makeStorage();
+    enableRule(storage, "edit", 1);
+    putAction(storage, 1, {gatekeeperId: 2, actionTag: "edit"});
+
+    let { applyFn, calls } = makeImmediateApply(storage);
+    await new AutoApprovalDrainer(storage, applyFn).drain(2);
+
+    expect(calls).toEqual([]);
+    expect(getAction(storage, 1).state).toBe("pending");
+    expect(storage.autoApproveTags.get("1:edit")).toBeDefined();
+    expect(storage.autoApproveTags.get("2:edit")).toBeUndefined();
+  });
+
+  it("does not carry a portable rule for an action the connector did not make auto-approvable", async () => {
+    let storage = makeStorage();
+    enableRule(storage, "mcp-push", 1);
+    putAction(storage, 1, {
+      gatekeeperId: 2,
+      actionTag: "mcp-push",
+      portableAcrossConnections: true,
+      autoApprovable: false,
+    });
+
+    let { applyFn, calls } = makeImmediateApply(storage);
+    await new AutoApprovalDrainer(storage, applyFn).drain(2);
+
+    expect(calls).toEqual([]);
+    expect(storage.autoApproveTags.get("1:mcp-push")).toBeDefined();
+    expect(storage.autoApproveTags.get("2:mcp-push")).toBeUndefined();
+  });
+
   it("applies all eligible pending actions in ascending id order", async () => {
     let storage = makeStorage();
     enableRule(storage);

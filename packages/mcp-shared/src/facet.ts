@@ -63,6 +63,11 @@ export abstract class McpFacetBase<
   /** Namespace preventing approval policy from crossing resource boundaries. */
   protected abstract get actionScopeTag(): string;
 
+  /** Whether this connector's exact endpoint/tool approval may survive a connection recreation. */
+  protected get portableAutoApproval(): boolean {
+    return false;
+  }
+
   /** Human-readable resource named when refusing an observer. */
   protected abstract get observerName(): string;
 
@@ -120,7 +125,11 @@ export abstract class McpFacetBase<
   async getAutoApprovableActions(): Promise<ActionKind[]> {
     return (await this.tools())
       .filter(entry => entry.autoApprovable)
-      .map(entry => actionKindFor(this.actionScopeTag, entry.tool.name));
+      .map(entry => actionKindFor(
+        this.actionScopeTag,
+        entry.tool.name,
+        this.portableAutoApproval,
+      ));
   }
 
   /** Starts a session with generated per-tool methods when the catalog is available. */
@@ -182,6 +191,6 @@ export abstract class McpFacetBase<
 
   /** Namespaces one tool's approval kind to this facet. */
   actionKindFor(toolName: string): ActionKind {
-    return actionKindFor(this.actionScopeTag, toolName);
+    return actionKindFor(this.actionScopeTag, toolName, this.portableAutoApproval);
   }
 }

@@ -91,8 +91,16 @@ export function toolInfo(entry: ClassifiedTool): McpToolInfo {
 
 // The approval-policy identity of one tool on one binding. `scopeTag` is caller-supplied so that two
 // connectors using the same binding id cannot share pre-approvals.
-export function actionKindFor(scopeTag: string, toolName: string): ActionKind {
-  return { tag: `${encodeURIComponent(scopeTag)}:${encodeURIComponent(toolName)}`, label: toolName };
+export function actionKindFor(
+  scopeTag: string,
+  toolName: string,
+  portableAcrossConnections = false,
+): ActionKind {
+  return {
+    tag: `${encodeURIComponent(scopeTag)}:${encodeURIComponent(toolName)}`,
+    label: toolName,
+    ...(portableAcrossConnections ? {portableAcrossConnections: true as const} : {}),
+  };
 }
 
 // One annotation as a fingerprint character. Tri-state, so that a server starting or stopping making

@@ -6,6 +6,7 @@
 import type { Collection } from "@gadgets/typed-storage";
 import type { AiChatAuthorInfo } from "@gadgets/workshop-shared/api";
 import { createWorkshopLogger } from "./observability";
+import type { ActionKind } from "@gadgets/workshop-shared/gatekeeper";
 import type { ActionRecord, AutoApproveTagRecord } from "./overseer.js";
 
 const logger = createWorkshopLogger("workshop.auto.approval");
@@ -13,6 +14,42 @@ const logger = createWorkshopLogger("workshop.auto.approval");
 export interface AutoApprovalStorage {
   actions: Collection<ActionRecord, number>;
   autoApproveTags: Collection<AutoApproveTagRecord>;
+}
+
+function ruleKey(gatekeeperId: number, tag: string): string {
+  return `${gatekeeperId}:${tag}`;
+}
+
+// Resolve the user's standing rule for this exact action kind. Ordinary rules remain scoped to a
+// gatekeeper id. A trusted connector may explicitly make its stable endpoint/tool tag portable so
+// credential refresh or reconnect can replace the internal id without discarding the user's prior
+// Always approve choice. The action still needs its independent autoApprovable=true signal.
+export function resolveAutoApprovalRule(
+    storage: Pick<AutoApprovalStorage, "autoApproveTags">,
+    gatekeeperId: number,
+    actionKind: ActionKind): AutoApproveTagRecord | undefined {
+  let exact = storage.autoApproveTags.get(ruleKey(gatekeeperId, actionKind.tag));
+  if (exact || actionKind.portableAcrossConnections !== true) return exact;
+
+  let previous = [...storage.autoApproveTags.list()]
+      .filter(rule => rule.actionKind.tag === actionKind.tag);
+  if (previous.length === 0) return undefined;
+
+  // Never choose between grants made by different users. A single-owner reconnect can accumulate
+  // duplicate orphaned records; those are equivalent and collapse to the replacement connection.
+  let approvers = new Set(previous.map(rule => `${rule.enabledBy.type}:${rule.enabledBy.id}`));
+  if (approvers.size !== 1) return undefined;
+
+  let adopted: AutoApproveTagRecord = {
+    gatekeeperId,
+    actionKind,
+    enabledBy: previous[0].enabledBy,
+  };
+  for (let rule of previous) {
+    storage.autoApproveTags.delete(ruleKey(rule.gatekeeperId, rule.actionKind.tag));
+  }
+  storage.autoApproveTags.put(adopted);
+  return adopted;
 }
 
 // Applies a single eligible pending action: invoke the gatekeeper, mark it approved, persist. The
@@ -63,14 +100,13 @@ export class AutoApprovalDrainer {
             rec.gatekeeperId === gatekeeperId && rec.type === "action" && rec.state === "pending");
 
     for (let record of pending) {
-      let tag = record.description.actionKind?.tag;
-      let rule = tag !== undefined
-          ? this.storage.autoApproveTags.get(`${gatekeeperId}:${tag}`)
-          : undefined;
-      if (record.description.autoApprovable !== true || rule === undefined) {
+      let actionKind = record.description.actionKind;
+      if (record.description.autoApprovable !== true || actionKind === undefined) {
         // A manual gate. Stop rather than skipping ahead to any later auto-eligible action.
         break;
       }
+      let rule = resolveAutoApprovalRule(this.storage, gatekeeperId, actionKind);
+      if (rule === undefined) break;
 
       // Re-check immediately before applying, to guard against a concurrent drain having already
       // taken this one.

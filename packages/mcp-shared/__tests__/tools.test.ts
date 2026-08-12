@@ -16,6 +16,18 @@ describe("actionKindFor", () => {
     expect(actionKindFor("binding", "tool:admin").tag)
       .not.toBe(actionKindFor("binding:tool", "admin").tag);
   });
+
+  it("marks only an explicitly portable approval kind as connection-independent", () => {
+    expect(actionKindFor("binding", "code", true)).toEqual({
+      tag: "binding:code",
+      label: "code",
+      portableAcrossConnections: true,
+    });
+    expect(actionKindFor("binding", "code")).toEqual({
+      tag: "binding:code",
+      label: "code",
+    });
+  });
 });
 
 describe("classifyTool", () => {

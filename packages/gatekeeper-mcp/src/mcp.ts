@@ -402,6 +402,17 @@ export class McpGatekeeperImpl
     return `mcp:${endpointTag(this.ctx.props.endpoint)}`;
   }
 
+  // Full-authority is an owner deployment decision for one exact endpoint/tool pair. Preserve the
+  // owner's standing Always approve choice when OAuth refresh recreates this connection with a new
+  // internal gatekeeper id. Other generic MCP connections remain connection-scoped.
+  protected get portableAutoApproval(): boolean {
+    return isFullAuthorityEndpoint(
+      this.ctx.props.endpoint,
+      this.env.MCP_FULL_AUTHORITY_ENDPOINT,
+      this.env.MCP_CLOUDFLARE_API_FULL_AUTHORITY,
+    );
+  }
+
   protected account(): ConnectionAccount {
     return this.ctx.exports.McpAccount.get(
       this.ctx.exports.McpAccount.idFromString(this.ctx.props.accountObjectId));

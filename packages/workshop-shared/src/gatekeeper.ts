@@ -971,6 +971,11 @@ export type ObservationDescription = {
 export type ActionKind = {
   tag: string;
   label: string;
+
+  // If true, an existing user-approved rule with the same stable tag may follow this action kind
+  // when a connector is recreated with a new gatekeeper id. Only trusted connector code may set
+  // this, and the action must still independently be marked autoApprovable.
+  portableAcrossConnections?: true;
 };
 
 // Describes an action submitted to the action approval queue. This contains all the information
