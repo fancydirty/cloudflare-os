@@ -201,7 +201,8 @@ export class ActionStore {
   reject(id: number): void {
     const stored = this.get(id);
     if (!stored || stored.state === "rejected") return;
-    if (stored.state !== "pending") {
+    const interrupted = stored.state === "failed" && stored.retryable === false;
+    if (stored.state !== "pending" && !interrupted) {
       throw new Error(stored.state === "applying"
         ? `MCP action ${id} is already being applied.`
         : `MCP action ${id} is already ${stored.state}.`);

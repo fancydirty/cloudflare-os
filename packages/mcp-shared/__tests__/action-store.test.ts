@@ -260,6 +260,27 @@ describe("ActionStore", () => {
     expect(recovered.get(staged.id)?.state).toBe("failed");
   });
 
+  it("lets a person dismiss an interrupted call whose outcome is unknown", () => {
+    const sql = fakeSql();
+    const store = new ActionStore(sql);
+    const staged = store.stage("send", {});
+    sql.exec(
+      "UPDATE mcp_actions SET state = 'applying', claimed_at = ? WHERE id = ?",
+      Date.now() - 5 * 60 * 1000,
+      staged.id,
+    );
+    const recovered = new ActionStore(sql);
+
+    expect(recovered.get(staged.id)).toMatchObject({
+      state: "failed",
+      retryable: false,
+    });
+
+    recovered.reject(staged.id);
+
+    expect(recovered.get(staged.id)?.state).toBe("rejected");
+  });
+
   it("does not let claims nobody will settle consume the queue permanently", async () => {
     // Only the next `apply()` for that same id settles an expired claim, and an evicted Durable
     // Object never makes one. Counting those rows retired the binding one interruption at a time.
