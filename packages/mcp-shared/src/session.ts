@@ -136,7 +136,16 @@ export class McpSessionBase extends RpcTarget {
     };
 
     try {
-      await this.#queue.submitAction(staged.id, description);
+      const submission = await this.#queue.submitAction(staged.id, description);
+      if (submission === "automatic") {
+        return {
+          status: "pending",
+          actionId: staged.id,
+          message:
+            `Calling "${name}" on ${host.serverName} is running under the owner's Connector ` +
+            `authority. Poll getActionResult(${staged.id}) for the outcome.`,
+        };
+      }
     } catch (err) {
       host.discardStagedAction(staged.id);
       throw err;

@@ -9,6 +9,10 @@ declare global {
       // Deployment-wide admin usernames.
       ADMINS?: string[];
 
+      // Single-owner deployments may treat connecting a resource as the owner's authorization
+      // decision, so Connector actions execute without Workshop approval cards.
+      SINGLE_USER_CONNECTOR_FULL_AUTHORITY?: string;
+
       // Workers AI binding (injected by generate-wrangler-prod / run-dev-server; not in base wrangler.jsonc).
       WORKERS_AI: Ai;
 

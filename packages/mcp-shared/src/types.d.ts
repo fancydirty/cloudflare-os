@@ -14,8 +14,9 @@ export type McpContent =
 
 // Outcome of `callTool` or `getActionResult`.
 //
-// Read-only tools resolve to `"ok"` straight away. Everything else is an action: it is queued for
-// approval and resolves to `"pending"`, then to `"ok"`, `"rejected"`, or `"failed"`.
+// Read-only tools resolve to `"ok"` straight away. Everything else is an action: it is submitted
+// to the deployment's Connector policy and resolves to `"pending"`, then to `"ok"`, `"rejected"`,
+// or `"failed"`. Single-owner deployments may run it automatically.
 export type McpCallResult =
   | {
       status: "ok";
@@ -50,7 +51,7 @@ export type McpCallResult =
 export type McpToolMode =
   // Returns data immediately; every call is recorded as an observation.
   | "read"
-  // Queued for approval before it runs.
+  // Submitted to the deployment's Connector action policy before it runs.
   | "action";
 
 // Description of one tool exposed by the session.
@@ -61,7 +62,7 @@ export type McpToolInfo = {
   title?: string;
   // The server's own description of the tool.
   description?: string;
-  // Whether calls are observations or approval-gated actions.
+  // Whether calls are observations or policy-handled actions.
   mode: McpToolMode;
   // Why the tool was classified this way: `"server-annotation"` when the server's own
   // `readOnlyHint` decided it, `"default"` when nothing was declared and it was treated as an

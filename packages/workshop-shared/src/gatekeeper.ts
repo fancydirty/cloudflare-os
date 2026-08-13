@@ -818,7 +818,9 @@ export interface ApprovalQueue extends ObservationAuthorizer {
   //
   // TODO: It would be nice if we can link this with the output gate so that if the submission
   //   does not complete, any SQL writes performed just before submit() are rolled back...
-  submitAction(action: number, description: ActionDescription): Promise<void>;
+  // `"automatic"` means this single-owner deployment accepted the connected resource itself as
+  // authorization and has scheduled the action without creating a human-approval request.
+  submitAction(action: number, description: ActionDescription): Promise<void | "automatic">;
 
   // Notifies the overseer that the gadget (or an agent) has requested to register a persistent
   // callback hook.

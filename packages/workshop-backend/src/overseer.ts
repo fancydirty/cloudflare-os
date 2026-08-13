@@ -36,6 +36,10 @@ import { completeAgentCatalogSnapshot, normalizeAgentCatalog } from "./agent-cat
 import { refreshCachedBalance } from "./ai-gateway-billing/cloudflare/connection-service";
 import { SharingManager, SharingCaller, CollaboratorRecord, ShareKeyRecord } from "./sharing";
 import { AutoApprovalDrainer, resolveAutoApprovalRule } from "./auto-approval";
+import {
+  ConnectorFullAuthorityExecutor,
+  connectorFullAuthorityEnabled,
+} from "./connector-full-authority";
 import { collectSlashCommands, invokeSlashCommand } from "./slash-commands";
 import { createWorkshopLogger, obsContext, traced } from "./observability";
 import type { ChatGatewayRpcTarget, SubmitExternalMessageResult } from "@gadgets/workshop-shared/external-message-gateway";
@@ -1026,6 +1030,7 @@ class OverseerImpl implements AgentHooks {
   #chatSubscribers: Set<RpcStub<AiChatSubscriber>> = new Set();
 
   #autoApprovalDrainer: AutoApprovalDrainer;
+  #connectorFullAuthority: ConnectorFullAuthorityExecutor;
 
   #preparingChatMessages = new Map<number, Promise<void>>();
 
@@ -1315,6 +1320,9 @@ class OverseerImpl implements AgentHooks {
         this.storage,
         (record, resolvedBy, autoApproved) =>
             this.applyPendingAction(record, resolvedBy, autoApproved));
+    this.#connectorFullAuthority = new ConnectorFullAuthorityExecutor(
+        () => this.#ownerUserDo().whoami(),
+        (record, owner) => this.applyPendingAction(record, owner, true));
 
     // Mirror every gadget-registry change into the owner's outputs index. Subscribing here makes
     // the registry the single chokepoint, so creation, acceptance, renaming, reverting and
@@ -2867,7 +2875,8 @@ class OverseerImpl implements AgentHooks {
 
   async submitAction(gatekeeperId: number, action: number,
                      description: ActionDescription, caller: GatekeeperCaller)
-      : Promise<void> {
+      : Promise<void | "automatic"> {
+    const fullAuthority = connectorFullAuthorityEnabled(this.env);
     if (this.storage.prohibitAllSharing.get()) {
       throw new Error(
           "This workspace has observed sensitive data. To prevent leaks, the workspace is prohibited " +
@@ -2891,6 +2900,28 @@ class OverseerImpl implements AgentHooks {
       type: "action",
       description
     };
+
+    if (fullAuthority) {
+      this.ctx.waitUntil(this.#connectorFullAuthority.run(record).catch(async error => {
+        try {
+          await this.getGatekeeperFacet(gatekeeperId).rejectAction(action);
+        } catch (rejectError) {
+          this.logger.error("could not discard failed single-user Connector action", {
+            event: "connector.full-authority.action.discard.failed",
+            gatekeeperId,
+            actionId,
+            error: rejectError,
+          });
+        }
+        this.logger.error("single-user Connector action failed", {
+          event: "connector.full-authority.action.failed",
+          gatekeeperId,
+          actionId,
+          error,
+        });
+      }));
+      return "automatic";
+    }
 
     this.storage.actions.put(record);
     this.#associateAction(caller, actionId);
@@ -9436,7 +9467,7 @@ class ApprovalQueueImpl extends RpcTarget implements ApprovalQueue {
     return this.impl.authorizeObservation(this.gatekeeperId, description, this.caller);
   }
 
-  submitAction(action: number, description: ActionDescription): Promise<void> {
+  submitAction(action: number, description: ActionDescription): Promise<void | "automatic"> {
     return this.impl.submitAction(this.gatekeeperId, action, description, this.caller);
   }
 

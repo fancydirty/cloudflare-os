@@ -214,8 +214,8 @@ function toolDoc(entry: ClassifiedTool, all: ClassifiedTool[]): string {
   const detail = mode === "read"
     ? "Read-only: returns `{ status: \"ok\" }` and is recorded as an observation."
     : autoApprovable
-      ? "Action: queued for approval, and may be auto-applied if you have opted in to its kind."
-      : "Action: queued for approval; the result arrives via `getActionResult`.";
+      ? "Action: submitted to the deployment's Connector policy and may run automatically."
+      : "Action: submitted to the deployment's Connector policy; the result arrives via `getActionResult`.";
   const method = toMethodName(tool.name);
   // Say the wire name whenever it is not obvious from the method name, so an agent reading only this
   // comment can still reach the tool through `callTool`.
@@ -335,11 +335,12 @@ export function generateSessionTypes(args: {
   lines.push(" *");
   lines.push(` * ${readTools.length} tool(s) are read-only and return results immediately, recorded`);
   lines.push(" * as observations. The remaining " + actionTools.length + " tool(s) are treated as actions:");
-  lines.push(" * `callTool` queues them for approval and returns `{ status: \"pending\" }`; the result");
-  lines.push(" * becomes available through `getActionResult` once a human approves.");
+  lines.push(" * `callTool` submits them to the deployment's Connector policy and returns");
+  lines.push(" * `{ status: \"pending\" }`; the result becomes available through `getActionResult`.");
   if (args.trust === "byo") {
     lines.push(" *");
-    lines.push(" * This server was supplied by the user, so no action is ever applied automatically.");
+    lines.push(" * This server was supplied by the user; the deployment decides whether actions need");
+    lines.push(" * per-call approval or run under a single owner's standing Connector authority.");
   }
   lines.push(" *");
   // Kept in the agent's view because the agent can otherwise build a share flow that cannot work.

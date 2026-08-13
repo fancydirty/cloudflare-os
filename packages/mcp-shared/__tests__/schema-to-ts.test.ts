@@ -303,8 +303,8 @@ describe("generateSessionTypes", { timeout: 15_000 }, () => {
       tool({ name: "write_it" }, "action"),
     ]);
     expect(output).toContain("recorded as an observation");
-    expect(output).toContain("queued for approval");
-    expect(output).toContain("supplied by the user, so no action is ever applied automatically");
+    expect(output).toContain("submitted to the deployment's Connector policy");
+    expect(output).toContain("the deployment decides whether actions need");
   });
 
   it("tells the agent sharing will not work, so it does not build a flow that cannot succeed", () => {
