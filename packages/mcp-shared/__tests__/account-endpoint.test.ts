@@ -450,6 +450,63 @@ describe("connect initiation nonce", () => {
     expect(complete).toHaveBeenCalledOnce();
     expect(await resumed.acceptAuthCode("authorization-code", oauthNonce)).toBe(false);
   });
+
+  it("does not publish the renewable access-token expiry as the account expiry after reconnect", async () => {
+    const context = fakeContext();
+    const restored = vi.fn(async () => undefined);
+    const connected = server("https://mcp.example/mcp");
+    context.storage.kv.put("server", connected);
+    context.storage.kv.put("connected", true);
+    context.storage.kv.put("callback", { credentialsRestored: restored });
+    vi.stubGlobal("fetch", async (input: string) => {
+      const url = String(input);
+      if (url.includes("oauth-protected-resource")) {
+        return Response.json({
+          resource: connected.endpoint,
+          authorization_servers: ["https://auth.example"],
+        });
+      }
+      if (url.includes("oauth-authorization-server")) {
+        return Response.json({
+          issuer: "https://auth.example",
+          authorization_endpoint: "https://auth.example/authorize",
+          token_endpoint: "https://auth.example/token",
+          registration_endpoint: "https://auth.example/register",
+          response_types_supported: ["code"],
+        });
+      }
+      if (url === "https://auth.example/register") {
+        return Response.json({
+          client_id: "client-id",
+          redirect_uris: ["https://gatekeeper.example/oauth"],
+          grant_types: ["authorization_code", "refresh_token"],
+          response_types: ["code"],
+          token_endpoint_auth_method: "none",
+        });
+      }
+      if (url === "https://auth.example/token") {
+        return Response.json({
+          access_token: "short-lived-access-token",
+          refresh_token: "long-lived-refresh-token",
+          token_type: "Bearer",
+          expires_in: 900,
+        });
+      }
+      return new Response("", { status: 404 });
+    });
+
+    const nonce = "8".repeat(64);
+    const account = new OAuthFlowAccount(context as never, {});
+    await account.prepareReconnect(nonce);
+    const outcome = await account.beginConnect(nonce, connected);
+    expect(outcome.kind).toBe("redirect");
+    const state = new URL((outcome as { url: string }).url).searchParams.get("state")!;
+    const oauthNonce = state.slice(state.indexOf(":") + 1);
+
+    expect(await account.acceptAuthCode("authorization-code", oauthNonce)).toBe(true);
+    expect(restored).toHaveBeenCalledOnce();
+    expect(restored).toHaveBeenCalledWith();
+  });
 });
 
 describe("resolveConnectTarget", () => {

@@ -619,8 +619,7 @@ export abstract class McpAccountBase<E extends AccountEnv, P = unknown>
 
     if (this.ctx.storage.kv.get<boolean>("reconnecting")) {
       this.ctx.storage.kv.delete("reconnecting");
-      const expiresAt = this.ctx.storage.kv.get<OAuthTokens>("tokens")?.expiresAt;
-      await callback.credentialsRestored(expiresAt ? new Date(expiresAt) : undefined);
+      await callback.credentialsRestored();
     } else {
       await callback.complete(this.mintAccount());
     }
