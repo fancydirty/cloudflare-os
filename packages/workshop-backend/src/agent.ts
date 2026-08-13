@@ -374,6 +374,29 @@ export interface AgentHooks {
 // =======================================================================================
 // Agent system prompt and tool descriptions
 
+let EXECUTION_DISCIPLINE = `
+# Execution discipline
+
+Continue until the assigned task is complete and verified. A progress report, a transient tool
+failure, or an unverified explanation is not a stopping condition. Stop only when the task is
+complete, a required human decision or credential is genuinely unavailable, or a concrete external
+blocker remains after relevant alternatives have been tested.
+
+Treat causes as hypotheses until a discriminating check confirms them. Report the observed fact
+separately from its possible explanation; never infer success or failure from a status field, a stale
+log, or one backend's view alone.
+
+When a Node.js project lives in Agent Computer, use container-shell consistently to inspect
+dependencies, install, build, and verify. Before installing, test for the exact required binary in
+that backend; do not reinstall merely because worker-shell cannot see node_modules. Run the
+project's required build before deployment when the deployment consumes build artifacts, then
+verify both the artifacts from container-shell and the live target.
+
+After a mutating Agent Computer command, require both a successful command result and completed
+durable synchronization before claiming that the change persisted. If durability is pending, use
+the provided retry mechanism and verify again.
+`.trim();
+
 let SYSTEM_PROMPT = `
 You are a helpful coding assistant tasked with helping users write small personal applications known as "Gadgets". A Gadget is an application that typically serves a single user, or a small group, rather than being public-facing. They may help a user automate part of their job, or just be gadgets the user makes for fun.
 
@@ -519,6 +542,8 @@ env.SOME_BINDING.registerGreeter(greeter);
 \`\`\`
 
 In Gadget code, the \`ctx\` object is passed to the \`DurableObject\` constructor and is automatically available as \`this.ctx\` within the class. When writing code for the \`executeCode\` tool call, the \`ctx\` object is passed as a parameter to your function. You can call \`ctx.restore()\` from either location, though usually it's best to call it as part of \`executeCode\` as usually registering hooks is something you do one time, not programmatically.
+
+${EXECUTION_DISCIPLINE}
 `.trim();
 
 let SPAWNER_SYSTEM_PROMPT = `
@@ -529,6 +554,8 @@ Gadgets execute on a restricted and heavily-sandboxed variant of Cloudflare Work
 You were started programmatically by the Gadget to perform a task. The specific task will be described in the first message in this chat. The message is not directly from the user but rather from an automated system. If you receive any further messages after the first, then these additional messages are directly from a human user making additional requests regarding the task.
 
 Typically (but not always), you will need to use the \`executeCode\` tool to complete the task, invoking the available bindings (members of the env object) and other APIs available to you.
+
+${EXECUTION_DISCIPLINE}
 `.trim();
 
 let READ_FILE_TOOL_DESCRIPTION = `
@@ -1056,6 +1083,14 @@ function makeReplayAssistantMessage(
 // schema before calling execute, so the runtime types are guaranteed).
 function defineTool<TParameters extends TSchema>(def: AgentTool<TParameters>): AgentTool {
   return def as unknown as AgentTool;
+}
+
+const MAX_AGENT_TURNS = 200;
+
+/** Returns a stateful predicate that reaches the per-execution model-turn limit. */
+export function createAgentTurnLimiter(): () => boolean {
+  let turnCount = 0;
+  return () => ++turnCount >= MAX_AGENT_TURNS;
 }
 
 // Runs one agent turn against the chat's history. Returns a checkpoint when the turn compacted
@@ -2848,8 +2883,7 @@ export async function runAgent(
   // failed turn is persisted.
   let turnFailure: {message: string} | undefined;
 
-  // Turn cap, replacing the old stepCountIs(30).
-  let turnCount = 0;
+  let reachedTurnLimit = createAgentTurnLimiter();
 
   // The awaited event sink driving both the client stream fan-out and the persistence barrier.
   let emit = async (event: AgentEvent): Promise<void> => {
@@ -3043,8 +3077,8 @@ export async function runAgent(
           // Cancelled during tool execution: the completed turn was persisted by the turn_end
           // barrier just above; don't start another (doomed) model request.
           abortSignal.aborted ||
-          // Hard cap on turns, as before.
-          ++turnCount >= 30 ||
+          // Hard cap on model turns within this execution.
+          reachedTurnLimit() ||
           // End the turn once the agent has successfully requested a connection: it must wait
           // for the user to respond, not keep reasoning in the meantime. (Accept resumes it on a
           // fresh turn; deny just leaves the turn ended.) A rejected requestConnection (e.g.
