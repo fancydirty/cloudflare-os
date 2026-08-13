@@ -374,7 +374,7 @@ export interface AgentHooks {
 // =======================================================================================
 // Agent system prompt and tool descriptions
 
-let EXECUTION_DISCIPLINE = `
+export const EXECUTION_DISCIPLINE = `
 # Execution discipline
 
 Continue until the assigned task is complete and verified. A progress report, a transient tool
@@ -385,6 +385,14 @@ blocker remains after relevant alternatives have been tested.
 Treat causes as hypotheses until a discriminating check confirms them. Report the observed fact
 separately from its possible explanation; never infer success or failure from a status field, a stale
 log, or one backend's view alone.
+
+A Connector action reported as \`rejected\` is an outcome, not proof that permission was withdrawn.
+Before changing permissions or declaring the Connector unavailable, retry a minimal side-effect-free
+call and compare a discriminating alternative. If an attempt reports
+\`Subrequest depth limit exceeded\`, shorten the Worker/RPC chain and invoke the shallowest binding
+that owns the needed data or operation. Call a Gadget's RPC method directly for its state, status,
+or run ledger; route through Agent Computer or codemode only when the task actually requires its
+files, shell, Git, browser, or container.
 
 When a Node.js project lives in Agent Computer, use container-shell consistently to inspect
 dependencies, install, build, and verify. Before installing, test for the exact required binary in
