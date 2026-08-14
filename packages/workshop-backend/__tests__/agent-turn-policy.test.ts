@@ -23,4 +23,11 @@ describe("agent turn policy", () => {
     expect(EXECUTION_DISCIPLINE).toMatch(/Gadget App.*run control.*Scheduler hook/is);
     expect(EXECUTION_DISCIPLINE).toMatch(/do not retry.*same.*deeper route/is);
   });
+
+  it("treats blank executeCode output as ambiguous and never retries a mutation blindly", () => {
+    expect(EXECUTION_DISCIPLINE).toMatch(/blank.*executeCode.*ambiguous/is);
+    expect(EXECUTION_DISCIPLINE).toMatch(/never.*blank.*success/is);
+    expect(EXECUTION_DISCIPLINE).toMatch(/do not repeat.*mutat/is);
+    expect(EXECUTION_DISCIPLINE).toMatch(/independent.*verif/is);
+  });
 });

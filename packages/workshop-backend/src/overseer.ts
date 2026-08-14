@@ -53,7 +53,7 @@ import { renderGadgetPdf } from "./browser-export";
 const logger = createWorkshopLogger("workshop.overseer");
 export const AGENT_RUNNING_ERROR_MESSAGE = "Agent is running, wait for it to finish.";
 
-let CODE_MODE_HARNESS =
+export const CODE_MODE_HARNESS =
 `import { WorkerEntrypoint, restore, RpcStub, RpcTarget } from "cloudflare:workers";
 import agent from "agent.js";
 
@@ -70,7 +70,7 @@ export default class extends WorkerEntrypoint {
         };
       }
     }
-    await agent(self, env, this.ctx);
+    return await agent(self, env, this.ctx);
   }
 
   [restore](params) {
@@ -115,7 +115,18 @@ interface CodeModeEntrypoint extends WorkerEntrypoint {
       callbackResolvers?: Record<string, {
         resolve: NativeRpcStub<(v: unknown) => void>,
         reject: NativeRpcStub<(e: unknown) => void>
-      }>): Promise<void>;
+      }>): Promise<unknown>;
+}
+
+export function formatCodeModeReturnValue(value: unknown): string {
+  if (typeof value === "string") return value;
+  try {
+    let json = JSON.stringify(value);
+    if (json !== undefined) return json;
+  } catch {
+    // Fall back to the ordinary string representation for non-JSON values.
+  }
+  return String(value);
 }
 
 // =======================================================================================
@@ -5511,8 +5522,9 @@ class OverseerImpl implements AgentHooks {
       }
 
       let error: string | undefined;
+      let returnValue: unknown;
       try {
-        await entrypoint.run(selfStub, callbackResolvers);
+        returnValue = await entrypoint.run(selfStub, callbackResolvers);
       } catch (err) {
         if (err instanceof Error && err.stack) {
           error = err.stack;
@@ -5539,6 +5551,11 @@ class OverseerImpl implements AgentHooks {
 
       if (error) {
         log += `\n\nUncaught exception: ${error}`;
+      }
+
+      if (returnValue !== undefined) {
+        let rendered = formatCodeModeReturnValue(returnValue);
+        log += `${log ? "\n" : ""}${rendered}`;
       }
 
       return log;
@@ -7103,20 +7120,23 @@ export class CodeModeTailLoopback extends WorkerEntrypoint<Cloudflare.Env, CodeM
   //   on workerd console, need to fix that first.
 
   async tail(events: TraceItem[]) {
-    if (events.length != 1) {
-      logger.error("unexpected code mode trace size", {
-        event: "code.mode.trace.size.unexpected",
-        gadgetId: this.ctx.props.overseerId,
-        executionId: this.ctx.props.executionId,
-        size: events.length,
-      });
-      return;
-    }
+    let relevant = events.filter(event =>
+      !(event.event && ("rpcMethod" in event.event) && event.event.rpcMethod === "verify"));
+    if (relevant.length === 0) return;
 
-    let event: TraceItem = events[0];
-    if (event.event && ("rpcMethod" in event.event) && event.event.rpcMethod === "verify") {
-      // ignore verify() call
-      return;
+    // Tail handlers receive a batch. A dynamic Worker invocation can include both verify() and
+    // run(), and Workers for Platforms can add further traces. Preserve all non-verify output in
+    // one delivery while using run() as the representative event when it is present.
+    let event = relevant.find(event =>
+      event.event && ("rpcMethod" in event.event) && event.event.rpcMethod === "run") ?? relevant[0];
+    if (relevant.length > 1) {
+      event = {
+        ...event,
+        logs: relevant.flatMap(event => event.logs),
+        exceptions: relevant.flatMap(event => event.exceptions),
+        diagnosticsChannelEvents:
+            relevant.flatMap(event => event.diagnosticsChannelEvents),
+      };
     }
 
     // HACK: Convert trace to serializable value by round-tripping to JSON.

@@ -386,6 +386,11 @@ Treat causes as hypotheses until a discriminating check confirms them. Report th
 separately from its possible explanation; never infer success or failure from a status field, a stale
 log, or one backend's view alone.
 
+A blank executeCode result is ambiguous. Never treat blank output as success or as proof that the
+log channel failed. Do not repeat a mutating call after an empty or interrupted result; first inspect
+its action result when available or use an independent, side-effect-free verification. A single
+side-effect-free read may be retried to distinguish a transient output failure from a real result.
+
 A Connector action reported as \`rejected\` is an outcome, not proof that permission was withdrawn.
 Before changing permissions or declaring the Connector unavailable, retry a minimal side-effect-free
 call and compare a discriminating alternative. If an attempt reports
@@ -647,7 +652,7 @@ NOTE: You do NOT need this tool to use a resource yourself with \`executeCode\` 
 `.trim();
 
 let EXECUTE_CODE_TOOL_DESCRIPTION = `
-Executes one-off JavaScript code, returning the output it logs to the console. The code runs in a sandbox where it cannot talk to the internet, except through the bindings in its 'env' object; fetch() will not work. Otherwise, the code can call any built-in APIs available in Cloudflare Workers.
+Executes one-off JavaScript code, returning both its function return value and anything it logs to the console. The code runs in a sandbox where it cannot talk to the internet, except through the bindings in its 'env' object; fetch() will not work. Otherwise, the code can call any built-in APIs available in Cloudflare Workers.
 
 The 'env' object contains this chat's named bindings:
 * An entry for each Gadget in the workspace, under the name given in the system prompt's gadget list (or the name you passed to \`createGadget\`): an RPC stub pointing at the Gadget's server-side Durable Object. If the user asks you to interact with a Gadget directly, or asks if you can "see" it, use this stub (read the Gadget's server code to learn what RPC methods it exposes).
@@ -2742,7 +2747,8 @@ export async function runAgent(
               "\n" +
               "```\n" +
               "export default async function(self, env, ctx) {\n" +
-              "  // ... code to execute ...\n" +
+              "  const result = await env.SOME_BINDING.someMethod();\n" +
+              "  return result;\n" +
               "}\n" +
               "```\n" +
               "\n" +
