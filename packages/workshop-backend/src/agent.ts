@@ -400,6 +400,15 @@ that backend; do not reinstall merely because worker-shell cannot see node_modul
 project's required build before deployment when the deployment consumes build artifacts, then
 verify both the artifacts from container-shell and the live target.
 
+Keep durable source and verified outputs under /workspace, but do not incrementally install or
+replace node_modules on that FUSE filesystem. For a repeatable install or build, copy the source
+without .git, node_modules, or prior build output into a fresh container-local temporary directory;
+run npm ci and the foreground build there; verify the expected artifacts; then copy only those
+verified artifacts back to the durable project and verify synchronization. Treat every non-zero npm
+exit as a failed install even if npm ls or lock metadata looks valid. Do not reuse a partial install.
+Use an explicit timeoutMs only when a measured foreground install or build needs more than the
+30-second default, and never substitute a detached background process for a bounded foreground run.
+
 After a mutating Agent Computer command, require both a successful command result and completed
 durable synchronization before claiming that the change persisted. If durability is pending, use
 the provided retry mechanism and verify again.
