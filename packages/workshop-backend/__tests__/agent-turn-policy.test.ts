@@ -17,5 +17,10 @@ describe("agent turn policy", () => {
     expect(EXECUTION_DISCIPLINE).toContain("Subrequest depth limit exceeded");
     expect(EXECUTION_DISCIPLINE).toMatch(/rejected.*not.*permission/is);
     expect(EXECUTION_DISCIPLINE).toMatch(/shallowest.*binding/is);
+    expect(EXECUTION_DISCIPLINE).toMatch(
+      /never.*Gadget.*starts? or spawns? an Agent.*executeCode/is,
+    );
+    expect(EXECUTION_DISCIPLINE).toMatch(/Gadget App.*run control.*Scheduler hook/is);
+    expect(EXECUTION_DISCIPLINE).toMatch(/do not retry.*same.*deeper route/is);
   });
 });

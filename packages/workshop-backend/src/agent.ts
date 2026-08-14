@@ -392,7 +392,9 @@ call and compare a discriminating alternative. If an attempt reports
 \`Subrequest depth limit exceeded\`, shorten the Worker/RPC chain and invoke the shallowest binding
 that owns the needed data or operation. Call a Gadget's RPC method directly for its state, status,
 or run ledger; route through Agent Computer or codemode only when the task actually requires its
-files, shell, Git, browser, or container.
+files, shell, Git, browser, or container. Never invoke a Gadget method that starts or spawns an Agent
+from executeCode. Use the Gadget App's run control or its registered Scheduler hook. After a
+depth-limit error, do not retry the same or a deeper route.
 
 When a Node.js project lives in Agent Computer, use container-shell consistently to inspect
 dependencies, install, build, and verify. Before installing, test for the exact required binary in
