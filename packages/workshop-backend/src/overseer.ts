@@ -129,6 +129,31 @@ export function formatCodeModeReturnValue(value: unknown): string {
   return String(value);
 }
 
+export function formatCodeModeOutput(
+    trace: TraceItem | null, error: string | undefined, returnValue: unknown): string {
+  if (!trace && returnValue === undefined) {
+    throw new Error("Timed out waiting for logs from code execution.");
+  }
+
+  let log = trace ? trace.logs.map(log => {
+    // Message is an array of params.
+    return (log.message as any[]).map(part => {
+      return typeof part === "string" ? part : JSON.stringify(part)
+    }).join(" ");
+  }).join("\n") : "";
+
+  if (error) {
+    log += `\n\nUncaught exception: ${error}`;
+  }
+
+  if (returnValue !== undefined) {
+    let rendered = formatCodeModeReturnValue(returnValue);
+    log += `${log ? "\n" : ""}${rendered}`;
+  }
+
+  return log;
+}
+
 // =======================================================================================
 
 // Per-chat in-memory state, used while an agent is running or agent callbacks are pending.
@@ -5536,29 +5561,7 @@ class OverseerImpl implements AgentHooks {
 
       let timeout = scheduler.wait(5000).then(() => { return null; })
       let trace = await Promise.race([tracePromise, timeout])
-
-      if (!trace) {
-        // Trace must have been lost... give up waiting.
-        throw new Error("Timed out waiting for logs from code execution.");
-      }
-
-      let log = trace.logs.map(log => {
-        // Message is an array of params.
-        return (log.message as any[]).map(part => {
-          return typeof part === "string" ? part : JSON.stringify(part)
-        }).join(" ");
-      }).join("\n");
-
-      if (error) {
-        log += `\n\nUncaught exception: ${error}`;
-      }
-
-      if (returnValue !== undefined) {
-        let rendered = formatCodeModeReturnValue(returnValue);
-        log += `${log ? "\n" : ""}${rendered}`;
-      }
-
-      return log;
+      return formatCodeModeOutput(trace, error, returnValue);
     } finally {
       this.#codeModeOutputSubscribers.delete(executionId);
       this.#codeModeResolvers.delete(executionId);

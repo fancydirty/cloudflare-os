@@ -58,4 +58,17 @@ describe("code mode output", () => {
       count: 2,
     })).toBe('{"ok":true,"count":2}');
   });
+
+  it("keeps a completed return value when the tail trace is missing", () => {
+    const formatCodeModeOutput = (
+      overseerModule as Record<string, unknown>
+    ).formatCodeModeOutput;
+
+    expect(formatCodeModeOutput).toBeTypeOf("function");
+    expect((formatCodeModeOutput as (
+      trace: TraceItem | null,
+      error: string | undefined,
+      returnValue: unknown,
+    ) => string)(null, undefined, { ok: true })).toBe('{"ok":true}');
+  });
 });
