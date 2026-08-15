@@ -154,6 +154,24 @@ export function formatCodeModeOutput(
   return log;
 }
 
+export function disposeCodeModeResources(...resources: unknown[]): void {
+  let disposed = new Set<object>();
+  for (let resource of resources) {
+    if ((typeof resource !== "object" && typeof resource !== "function") ||
+        resource === null || disposed.has(resource)) {
+      continue;
+    }
+
+    disposed.add(resource);
+    try {
+      (resource as { [Symbol.dispose]?: () => void })[Symbol.dispose]?.();
+    } catch {
+      // Cleanup is best-effort. Continue releasing the remaining owned resources even if one
+      // disposer is already closed or throws during teardown.
+    }
+  }
+}
+
 // =======================================================================================
 
 // Per-chat in-memory state, used while an agent is running or agent callbacks are pending.
@@ -5462,6 +5480,10 @@ class OverseerImpl implements AgentHooks {
       this.#codeModeResolvers.set(executionId, resolve);
     });
 
+    let worker: WorkerStub | undefined;
+    let entrypoint: Fetcher<CodeModeEntrypoint> | undefined;
+    let returnValue: unknown;
+
     try {
       let tailProps = {
         executionId,
@@ -5489,12 +5511,12 @@ class OverseerImpl implements AgentHooks {
         globalOutbound: null,
       };
 
-      let entrypoint: Fetcher<CodeModeEntrypoint>;
       let restoreGadgetId = this.executeCodeRestoreTarget();
       if (restoreGadgetId === undefined) {
         // With no gadget to own persistent callbacks, load the worker directly. ctx.restore()
         // inside it will fail immediately rather than producing a stub that cannot restore later.
-        entrypoint = this.env.LOADER.load(workerDef).getEntrypoint<CodeModeEntrypoint>();
+        worker = this.env.LOADER.load(workerDef);
+        entrypoint = worker.getEntrypoint<CodeModeEntrypoint>();
       } else {
         // Wacky hack: Load the code mode dynamic worker through `ctx.restore()`, so that it gets
         // imbued with a self-token encoding its restore params as `{ type: "gadget", codeId }`.
@@ -5515,7 +5537,7 @@ class OverseerImpl implements AgentHooks {
       }
 
       // First check the code actually starts up. Treat startup errors as total failures.
-      await entrypoint.verify();
+      await entrypoint!.verify();
 
       // Create the `self` magic object that allows executed code to call back into this
       // chat thread. Uses the initiator's user ID for model resolution on callbacks.
@@ -5547,9 +5569,8 @@ class OverseerImpl implements AgentHooks {
       }
 
       let error: string | undefined;
-      let returnValue: unknown;
       try {
-        returnValue = await entrypoint.run(selfStub, callbackResolvers);
+        returnValue = await entrypoint!.run(selfStub, callbackResolvers);
       } catch (err) {
         if (err instanceof Error && err.stack) {
           error = err.stack;
@@ -5563,6 +5584,10 @@ class OverseerImpl implements AgentHooks {
       let trace = await Promise.race([tracePromise, timeout])
       return formatCodeModeOutput(trace, error, returnValue);
     } finally {
+      // Dynamic Worker entrypoints are RPC stubs. If they outlive this execution they keep the
+      // child invocation alive and four such leaked sessions exhaust the platform concurrency
+      // limit. Dispose the returned RPC value first, then the entrypoint and loaded Worker.
+      disposeCodeModeResources(returnValue, entrypoint, worker);
       this.#codeModeOutputSubscribers.delete(executionId);
       this.#codeModeResolvers.delete(executionId);
     }

@@ -71,4 +71,31 @@ describe("code mode output", () => {
       returnValue: unknown,
     ) => string)(null, undefined, { ok: true })).toBe('{"ok":true}');
   });
+
+  it("disposes every owned code mode RPC resource exactly once", () => {
+    const disposeCodeModeResources = (
+      overseerModule as Record<string, unknown>
+    ).disposeCodeModeResources;
+    const disposed: string[] = [];
+    const result = {
+      [Symbol.dispose]: () => {
+        disposed.push("result");
+        throw new Error("already closed");
+      },
+    };
+    const entrypoint = { [Symbol.dispose]: () => disposed.push("entrypoint") };
+    const worker = { [Symbol.dispose]: () => disposed.push("worker") };
+
+    expect(disposeCodeModeResources).toBeTypeOf("function");
+    (disposeCodeModeResources as (...resources: unknown[]) => void)(
+      result,
+      entrypoint,
+      worker,
+      result,
+      123,
+      null,
+    );
+
+    expect(disposed).toEqual(["result", "entrypoint", "worker"]);
+  });
 });
